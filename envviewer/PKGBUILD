@@ -1,0 +1,36 @@
+# https://wiki.archlinux.org/title/Arch_package_guidelines
+# Maintainer: Your Name <youremail@domain.com>
+pkgname=envviewer    # 名称
+pkgver=1.0.0  # 版本
+pkgrel=1        # 通常为 1，不需要更改，当版本不变需要让用户重新安装软件包时
+                #（如 PKGBUILD 增加补丁、修复 bug），需要加 1。
+pkgdesc="基于QT（6）编写的Linux下的环境变量编辑器"      # 介绍
+arch=("x86_64")         # 适用的架构，如 x86_64、aarch64、i386，也可以是 any，表示软件不受架构限制
+license=("GPL") # 许可证
+groups=()
+depends=("qt5-base" "qt6-base")      # 软件运行所需的依赖
+makedepends=()  # 构建软件所需的依赖
+provides=()     # 提供的功能
+conflicts=()    # 与什么功能冲突，通常与 provides 的值相同
+replaces=()     # 该包安装时替换什么包，基本用不到
+backup=()       # 该包安装或卸载时，要备份的文件的路径，
+                # 使用相对路径（如 etc/pacman.conf），通常是配置文件。
+                # 小知识：
+                # 升级时包自带的要备份的文件将会以 .pacnew 后缀保存，不覆盖本地的；
+                # 卸载时本地的要备份的文件会以 .pacsave 后缀重新命名
+options=()      # makepkg 选项，具体参数在
+                # https://man.archlinux.org/man/PKGBUILD.5#OPTIONS_AND_DIRECTIVES
+source_x86_64=("envviewer.tar.gz")
+                # 不定构架，软件来源（可以是压缩文件，也可以是 git 仓库地址，写法见下面的 git 示例），
+                # FILENAME 用于将下载到的文件命名为它，
+                # 可以用上面定义的变量组成，如 $pkgname-$pkgver.tar.gz
+                # makepkg 会自动解压，解压后的目录存于变量 srcdir
+                # URL 则是指向文件的链接
+#source=(URL)   # FILENAME 也可以省略
+#source_x86_64  # 相应架构的软件来源
+sha256sums_x86_64=("0890daaa7bbb112facec35364b7f8341890d22b25efb0982f58a02a12f98f718")   # 不定架构的软件来源的 hash，下文将介绍用
+package() {
+
+  install -dm755 ${pkgdir}/usr/bin
+  install -Dm755 ${srcdir}/envviewer/build/unknown-Release/envviewer ${pkgdir}/usr/bin/envviewer # srcdir 变量是软件来源解压后的目录
+}
