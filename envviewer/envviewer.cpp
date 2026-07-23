@@ -1,5 +1,6 @@
 
 #include "head.h"
+#include "qapplication.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,8 +12,8 @@
 #include <QMenuBar>
 #include <QSettings>
 #include <QFileInfo>
-
-
+#include <algorithm>
+#include <QClipboard>
 
 // --------------------- EnvViewer 实现 ---------------------
 EnvViewer::EnvViewer(QWidget *parent)
@@ -25,6 +26,7 @@ EnvViewer::EnvViewer(QWidget *parent)
     loadSettings();
      // 创建菜单栏
     QMenuBar *menuBar = new QMenuBar(this);
+
     QMenu *prefMenu = menuBar->addMenu("偏好设置");
     QAction *prefAction = prefMenu->addAction("偏好设置");
     connect(prefAction, &QAction::triggered, this, [this]() {
@@ -54,6 +56,10 @@ EnvViewer::EnvViewer(QWidget *parent)
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
 
+    table->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table, &QWidget::customContextMenuRequested,
+            this, &EnvViewer::onTableContextMenu);
+
     // 按钮
     addBtn = new QPushButton("添加变量", this);
     deleteBtn = new QPushButton("删除变量", this);
@@ -67,15 +73,20 @@ EnvViewer::EnvViewer(QWidget *parent)
     //btnLayout->addWidget(refreshBtn);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setMenuBar(menuBar);   // 需要 Qt 5.11+ 或手动插入
+    mainLayout->setMenuBar(menuBar);
     mainLayout->addWidget(table);
     mainLayout->addLayout(btnLayout);
+   // mainLayout->addWidget(menuBar);
+    //搜索功能
+    searchEdit = new QLineEdit(this);
+    searchEdit->setPlaceholderText("搜索变量名...");
+    searchEdit->setClearButtonEnabled(true);
+    mainLayout->insertWidget(0, searchEdit);  // 插入到表格之后、按钮之前（索引根据实际调整）
+
+    connect(searchEdit, &QLineEdit::textChanged, this, &EnvViewer::filterTable);
     setLayout(mainLayout);
 
-
-
     process = new QProcess(this);
-
     // 信号连接
     //connect(refreshBtn, &QPushButton::clicked, this, &EnvViewer::loadEnvironment);
     connect(addBtn, &QPushButton::clicked, this, &EnvViewer::addVariable);
@@ -84,6 +95,8 @@ EnvViewer::EnvViewer(QWidget *parent)
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &EnvViewer::readProcessOutput);
 
+    //双击触发编辑操作
+    connect(table, &QTableWidget::cellDoubleClicked,this, &EnvViewer::onTableCellDoubleClicked);
     // 启动时自动加载
     //loadCustomVarsFromFile();   // 先加载 ~/.path 中的自定义变量，不阻塞
     loadEnvironment();
@@ -96,6 +109,8 @@ EnvViewer::~EnvViewer()
         process->waitForFinished(3000);
     }
 }
+
+
 
 void EnvViewer::loadEnvironment()
 {
@@ -134,6 +149,7 @@ void EnvViewer::readProcessOutput()
     // 统一刷新表格
     loadCustomVarsFromFile();
     updateTableDisplay();
+    sortPathFile();   // 启动/刷新时自动排序整理文件
 }
 
 void EnvViewer::addVariable()
@@ -171,6 +187,7 @@ void EnvViewer::addVariable()
 
         // 立即刷新显示
         updateTableDisplay();
+        sortPathFile();          // 新增：排序文件
     }
 }
 
@@ -187,7 +204,7 @@ void EnvViewer::editVariable()
     QString source = table->item(row, 2)->text();
 
     QStringList allPaths = oldValue.split(':', Qt::SkipEmptyParts);
-    bool isMultiValue = (allPaths.size() > 2);
+    bool isMultiValue = (allPaths.size() > 2 );
 
     if (isMultiValue) {
         // 获取系统原始路径
@@ -239,11 +256,58 @@ void EnvViewer::editVariable()
                 out << "export " << name << "=" << newValue << "\n";
                 file.close();
             }
-        } else {
+        }
+        else {
             customVars[name] = newValue;
-            // 重写文件…（保持原有实现，此处略）
+            QFile file(pathFilePath);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QStringList lines;
+                QTextStream in(&file);
+                bool found = false;
+                while (!in.atEnd()) {
+                    QString line = in.readLine();
+                    QString trimmed = line.trimmed();
+                    if (trimmed.startsWith("export ")) {
+                        QString rest = trimmed.mid(7).trimmed();
+                        int eqIdx = rest.indexOf('=');
+                        if (eqIdx != -1) {
+                            QString key = rest.left(eqIdx).trimmed();
+                            if (key == name) {
+                                lines.append("export " + name + "=" + newValue);
+                                found = true;
+                                continue;
+                            }
+                        }
+                    }
+                    lines.append(line);
+                }
+                file.close();
+
+                if (!found) {
+                    // 如果找不到旧行（可能被手动删除），追加新行
+                    lines.append("export " + name + "=" + newValue);
+                }
+
+                // 写回文件
+                if (file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+                    QTextStream out(&file);
+                    for (const QString &l : lines)
+                        out << l << "\n";
+                    file.close();
+                }
+            } else {
+                // 文件不存在，直接创建
+                QFile newFile(pathFilePath);
+                if (newFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    QTextStream out(&newFile);
+                    out << "export " + name + "=" + newValue + "\n";
+                    newFile.close();
+                }
+            }
+            QMessageBox::information(this, "成功", "变量修改成功");   // 新增
         }
         updateTableDisplay();
+        sortPathFile();          // 新增：排序文件
     }
 }
 void EnvViewer::deleteVariable()
@@ -306,6 +370,7 @@ void EnvViewer::deleteVariable()
 
     // 刷新表格显示
     updateTableDisplay();
+    sortPathFile();          // 新增：排序文件
     QMessageBox::information(this, "成功", "变量删除成功");   // 新增
 }
 
@@ -362,9 +427,21 @@ void EnvViewer::updateTableDisplay()
             valueItem->setToolTip(cust.value());
             table->setItem(row, 1, valueItem);
 
+            //设置颜色
             table->setItem(row, 2, new QTableWidgetItem("custom"));
         }
     }
+    for (int i = 0; i < table->rowCount(); ++i) {
+        QTableWidgetItem *sourceItem = table->item(i, 2);
+        if (!sourceItem) continue;
+        if (sourceItem->text() == "custom")
+            sourceItem->setBackground(QColor(144, 238, 144));
+
+    }
+
+    filterTable(searchEdit->text());
+    filterTable(searchEdit->text());
+
     //自动调整宽度
     //table->resizeColumnsToContents();
 }
@@ -449,6 +526,7 @@ void EnvViewer::resetSystemVariable(const QString &name)
 
     // 刷新表格显示（系统变量恢复为 env 命令提供的原始值，若无则消失）
     updateTableDisplay();
+    sortPathFile();          // 新增：排序文件
 }
 
 void EnvViewer::onPathAdded(const QString &varName, const QString &path)
@@ -468,6 +546,7 @@ void EnvViewer::onPathAdded(const QString &varName, const QString &path)
     // 重新从文件加载该变量的最终值并更新表格
     loadCustomVarsFromFile();   // 简单重建所有自定义变量
     updateTableDisplay();
+    sortPathFile();          // 新增：排序文件
 }
 
 void EnvViewer::onCustomPathsChanged(const QString &varName, const QStringList &customPaths)
@@ -511,6 +590,7 @@ void EnvViewer::onCustomPathsChanged(const QString &varName, const QStringList &
     // 重新加载并刷新表格
     loadCustomVarsFromFile();
     updateTableDisplay();
+    sortPathFile();          // 新增：排序文件
 }
 
 bool EnvViewer::hasExportInFile(const QString &varName)
@@ -586,4 +666,135 @@ void EnvViewer::updateBashrcSource(const QString &filePath)
     for (const QString &line : newLines)
         out << line << "\n";
     file.close();
+}
+//变量搜索功能
+void EnvViewer::filterTable(const QString &text)
+{
+    for (int i = 0; i < table->rowCount(); ++i) {
+        QTableWidgetItem *item = table->item(i, 0);
+        if (item) {
+            bool match = item->text().contains(text, Qt::CaseInsensitive);
+            table->setRowHidden(i, !match);
+        }
+    }
+}
+//双击触发编辑操作
+void EnvViewer::onTableCellDoubleClicked(int row, int /*column*/)
+{
+    table->selectRow(row);   // 确保当前行为双击的行
+    editVariable();          // 调用已有编辑功能
+}
+
+void EnvViewer::sortPathFile()
+{
+    QFile file(pathFilePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+
+    QStringList exportLines;
+    QTextStream in(&file);
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (line.startsWith("export "))
+            exportLines.append(line);
+    }
+    file.close();
+
+    if (exportLines.isEmpty())
+        return;
+
+    // 判断是否为多值变量：值中引用自身（$VAR 或 ${VAR}）
+    auto isMultiValue = [](const QString &varName, const QString &value) -> bool {
+        return value.contains("$" + varName) || value.contains("${" + varName + "}");
+    };
+
+    QStringList singleValueLines, multiValueLines;
+    for (const QString &line : exportLines) {
+        QString rest = line.mid(7).trimmed();   // 去掉 "export "
+        int eqIdx = rest.indexOf('=');
+        if (eqIdx == -1) continue;
+        QString key = rest.left(eqIdx).trimmed();
+        QString value = rest.mid(eqIdx + 1);
+        if (isMultiValue(key, value))
+            multiValueLines.append(line);
+        else
+            singleValueLines.append(line);
+    }
+
+    // 按变量名排序（不区分大小写）
+    auto sortByVarName = [](QStringList &list) {
+        std::sort(list.begin(), list.end(), [](const QString &a, const QString &b) {
+            auto varName = [](const QString &s) -> QString {
+                QString r = s.mid(7).trimmed();
+                int eq = r.indexOf('=');
+                return (eq == -1) ? r : r.left(eq).trimmed();
+            };
+            return QString::compare(varName(a), varName(b), Qt::CaseInsensitive) < 0;
+        });
+    };
+    sortByVarName(singleValueLines);
+    sortByVarName(multiValueLines);
+
+    // 合并：单值在上，多值在下
+    QStringList sortedLines = singleValueLines + multiValueLines;
+
+    // 写回文件
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        QTextStream out(&file);
+        for (const QString &l : sortedLines)
+            out << l << "\n";
+        file.close();
+    }
+}
+
+void EnvViewer::onTableContextMenu(const QPoint &pos)
+{
+    // 获取鼠标点击位置对应的行
+    QTableWidgetItem *item = table->itemAt(pos);
+    int row = item ? item->row() : -1;
+
+    QMenu menu(this);
+    QAction *addAction = menu.addAction("添加变量");
+    QAction *editAction = menu.addAction("编辑变量");
+    QAction *deleteAction = menu.addAction("删除变量");
+    menu.addSeparator();
+    QAction *copyAction = menu.addAction("复制变量名");
+
+    // 如果没有选中行，禁用编辑、删除、复制
+    bool hasSelection = (row >= 0);
+    editAction->setEnabled(hasSelection);
+    deleteAction->setEnabled(hasSelection);
+    copyAction->setEnabled(hasSelection);
+
+    // 连接动作（使用 exec 返回选择的动作）
+    QAction *selectedAction = menu.exec(table->viewport()->mapToGlobal(pos));
+    if (selectedAction == addAction) {
+        addVariable();
+    } else if (selectedAction == editAction) {
+        table->selectRow(row);
+        editVariable();
+    } else if (selectedAction == deleteAction) {
+        table->selectRow(row);
+        deleteVariable();
+    } else if (selectedAction == copyAction) {
+        table->selectRow(row);
+        copyVariableName();
+    }
+}
+void EnvViewer::copyVariableName()
+{
+    int row = table->currentRow();
+    if (row < 0) {
+        QMessageBox::warning(this, "提示", "请先选中要复制的行。");
+        return;
+    }
+
+    QString name = table->item(row, 0)->text();
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, "提示", "变量名为空，无法复制。");
+        return;
+    }
+
+    QApplication::clipboard()->setText(name);
+    QMessageBox::information(this, "成功", "变量名已复制到剪贴板。");
 }

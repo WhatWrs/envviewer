@@ -2,6 +2,7 @@
 #define ENVVIEWER_H
 
 #include <QWidget>
+#include <QMainWindow>
 #include <QLabel>
 #include <QTableWidget>
 #include <QPushButton>
@@ -36,6 +37,11 @@ private slots:
     void resetSystemVariable(const QString &name);   // 新增
     void onPathAdded(const QString &varName, const QString &path);
     void onCustomPathsChanged(const QString &varName, const QStringList &customPaths);
+    void filterTable(const QString &text);   // 搜索过滤槽
+    void onTableCellDoubleClicked(int row, int column);//双击操作
+    void onTableContextMenu(const QPoint &pos);
+    void copyVariableName();
+
 
 private:
     void updateTableDisplay();         // 新增：根据系统变量和自定义变量刷新表格
@@ -44,6 +50,8 @@ private:
     void loadSettings();                  // 从配置文件加载 pathFilePath
     void saveSettings();                  // 保存当前 pathFilePath
     void updateBashrcSource(const QString &filePath);
+    void sortPathFile();   // 对 .path 文件进行排序和分类
+
 
     QTableWidget *table;
     //QPushButton  *refreshBtn;
@@ -53,8 +61,8 @@ private:
     QProcess     *process;
     QMap<QString, QString> systemVars; // 新增：保存从 env 获取的系统变量
     QMap<QString, QString> customVars; // 新增：用户自定义的变量
-
     QString pathFilePath;   // 存储 ~/.path 的完整路径
+    QLineEdit *searchEdit;                   // 搜索框
 };
 
 #endif // ENVVIEWER_H

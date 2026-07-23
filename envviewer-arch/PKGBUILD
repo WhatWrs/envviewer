@@ -20,7 +20,7 @@ backup=()       # 该包安装或卸载时，要备份的文件的路径，
                 # 卸载时本地的要备份的文件会以 .pacsave 后缀重新命名
 options=()      # makepkg 选项，具体参数在
                 # https://man.archlinux.org/man/PKGBUILD.5#OPTIONS_AND_DIRECTIVES
-source_x86_64=("envviewer.tar.gz")
+source_x86_64=("envviewer.tar")
                 # 不定构架，软件来源（可以是压缩文件，也可以是 git 仓库地址，写法见下面的 git 示例），
                 # FILENAME 用于将下载到的文件命名为它，
                 # 可以用上面定义的变量组成，如 $pkgname-$pkgver.tar.gz
@@ -28,9 +28,43 @@ source_x86_64=("envviewer.tar.gz")
                 # URL 则是指向文件的链接
 #source=(URL)   # FILENAME 也可以省略
 #source_x86_64  # 相应架构的软件来源
-sha256sums_x86_64=("5c76f1a3e792131fc4502e5f299b718b8652b282bb8a40abdcccd9ebb30ccfab")   # 不定架构的软件来源的 hash，下文将介绍用
+sha256sums_x86_64=("SKIP")   # 不定架构的软件来源的 hash，下文将介绍用
 package() {
 
-  install -dm755 ${pkgdir}/usr/bin
-  install -Dm755 ${srcdir}/envviewer/build/unknown-Release/envviewer ${pkgdir}/usr/bin/envviewer # srcdir 变量是软件来源解压后的目录
+  echo "创建目录树中..."
+  install -dm755 ${pkgdir}/usr/local/bin
+  install -dm755 ${pkgdir}/usr/share/applications
+  install -dm755 ${pkgdir}/usr/share/icons
+  install -dm755 ${pkgdir}/usr/share/pixmaps
+  install -dm755 ${pkgdir}/opt/envviewer
+  echo "构建中..."
+  install -m755 ${srcdir}/envviewer.sh ${pkgdir}/usr/local/bin/envviewer
+  cp -r   ${srcdir}/hicolor ${pkgdir}/usr/share/icons/
+  install -m755 ${srcdir}/hicolor/envviewer.png ${pkgdir}/usr/share/pixmaps
+  install -m755 ${srcdir}/envviewer.desktop ${pkgdir}/usr/share/applications/
+  install -m755 ${srcdir}/envviewer ${pkgdir}/opt/envviewer
 }
+
+
+
+post_install() {
+  # 安装后更新缓存
+  gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+}
+
+post_upgrade() {
+  # 升级后也更新（防止旧缓存干扰新图标）
+  gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+}
+
+pre_remove() {
+  # 卸载前移除缓存，保持系统干净
+  gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+}
+
+
+
+
+
+
+

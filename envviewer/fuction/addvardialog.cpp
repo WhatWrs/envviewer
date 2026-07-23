@@ -6,12 +6,13 @@ AddVarDialog::AddVarDialog(QWidget *parent)
     setWindowTitle("添加/编辑环境变量");
     nameEdit = new QLineEdit(this);
     valueEdit = new QLineEdit(this);
-
     sourceLabel = new QLabel(this);
 
     QFormLayout *form = new QFormLayout;
     form->addRow("变量名:", nameEdit);
+    nameEdit->adjustSize();
     form->addRow("值:", valueEdit);
+    //valueEdit->setMinimumWidth(300);
     form->addRow("定义者:", sourceLabel);
 
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -27,6 +28,7 @@ AddVarDialog::AddVarDialog(QWidget *parent)
     mainLayout->addLayout(form);
     mainLayout->addWidget(buttonBox);
     setLayout(mainLayout);
+    setMinimumWidth(400);
 }
 
 QString AddVarDialog::varName() const { return nameEdit->text().trimmed(); }

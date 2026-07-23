@@ -16,4 +16,10 @@
 
 # 打包
 
-提供了arch的打包方式 `make -si`
+arch
+`make -si`
+
+debian脚本打包
+脚本打包
+ `bash deb-build.sh`
+

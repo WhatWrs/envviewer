@@ -1,0 +1,8 @@
+Package: envviewer
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends:qt6-base-dev
+Maintainer: wuruishuo <wuruishuo2023@163.com>
+Description:基于QT（6）编写的Linux下的环境变量编辑器

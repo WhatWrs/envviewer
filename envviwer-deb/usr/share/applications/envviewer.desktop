@@ -1,0 +1,21 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Categories=System;
+
+Comment=envviewer
+Exec=/opt/envviewer/envviewer
+
+GenericName=基于QT（6）编写的Linux下的环境变量编辑器
+Icon=envviewer
+MimeType=
+Name[zh_CN]=环境变量编辑器
+Name=环境变量编辑器
+NoDisplay=false
+Path=
+PrefersNonDefaultGPU=false
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=
