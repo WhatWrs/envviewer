@@ -34,6 +34,8 @@ private slots:
     void onAddClicked();
     void onDeleteClicked();   // 新增：删除选中路径
     void onEditClicked();
+    void onContextMenu(const QPoint &pos);
+    void copySelectedPath();
 
 private:
     QString     m_varName;

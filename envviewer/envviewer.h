@@ -41,6 +41,9 @@ private slots:
     void onTableCellDoubleClicked(int row, int column);//双击操作
     void onTableContextMenu(const QPoint &pos);
     void copyVariableName();
+    void copyVariableValue();
+    void exportCustomVars();
+    void importCustomVars();
 
 
 private:

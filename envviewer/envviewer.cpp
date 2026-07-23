@@ -14,6 +14,9 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <QClipboard>
+#include <QDateTime>
+#include <QFileDialog>
+#include <QRegularExpression>
 
 // --------------------- EnvViewer 实现 ---------------------
 EnvViewer::EnvViewer(QWidget *parent)
@@ -27,8 +30,8 @@ EnvViewer::EnvViewer(QWidget *parent)
      // 创建菜单栏
     QMenuBar *menuBar = new QMenuBar(this);
 
-    QMenu *prefMenu = menuBar->addMenu("偏好设置");
-    QAction *prefAction = prefMenu->addAction("偏好设置");
+    QMenu *settingMenu = menuBar->addMenu("设置");
+    QAction *prefAction = settingMenu->addAction("偏好设置");
     connect(prefAction, &QAction::triggered, this, [this]() {
         PreferencesDialog dlg(pathFilePath, this);
         if (dlg.exec() == QDialog::Accepted) {
@@ -39,6 +42,30 @@ EnvViewer::EnvViewer(QWidget *parent)
             loadCustomVarsFromFile();
             updateTableDisplay();
         }
+    });
+
+    settingMenu->addSeparator();
+    QAction *exportAction = settingMenu->addAction("导出自定义变量");
+    connect(exportAction, &QAction::triggered, this, &EnvViewer::exportCustomVars);
+    QAction *importAction = settingMenu->addAction("导入自定义变量");
+    connect(importAction, &QAction::triggered, this, &EnvViewer::importCustomVars);
+
+    settingMenu->addSeparator();
+    QAction *aboutAction = settingMenu->addAction("关于");
+    connect(aboutAction, &QAction::triggered, this, [this]() {
+        QMessageBox aboutBox(this);
+        aboutBox.setWindowTitle("关于");
+        aboutBox.setIcon(QMessageBox::Information);
+        aboutBox.setText("<h3>Linux 系统环境变量查看器</h3>"
+                         "<p>版本：1.0</p>"
+                         "<p>一个基于 Qt 的 Linux 环境变量管理工具，"
+                         "支持查看、添加、编辑和删除系统环境变量。</p>"
+                         "<hr>"
+                         "<p>项目地址：<br>"
+                         "<a href='https://gitee.com/WRSwhat/envviewer.git'>"
+                         "https://gitee.com/WRSwhat/envviewer.git</a></p>");
+        aboutBox.setTextFormat(Qt::RichText);
+        aboutBox.exec();
     });
 
 
@@ -326,6 +353,17 @@ void EnvViewer::deleteVariable()
     }
 
     QString name = table->item(row, 0)->text();
+
+    // 确认删除
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "确认删除",
+        QString("确定要删除自定义变量 \"%1\" 吗？").arg(name),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No
+    );
+    if (reply != QMessageBox::Yes)
+        return;
 
     // 从自定义变量集移除
     customVars.remove(name);
@@ -759,12 +797,14 @@ void EnvViewer::onTableContextMenu(const QPoint &pos)
     QAction *deleteAction = menu.addAction("删除变量");
     menu.addSeparator();
     QAction *copyAction = menu.addAction("复制变量名");
+    QAction *copyValueAction = menu.addAction("复制变量值");
 
     // 如果没有选中行，禁用编辑、删除、复制
     bool hasSelection = (row >= 0);
     editAction->setEnabled(hasSelection);
     deleteAction->setEnabled(hasSelection);
     copyAction->setEnabled(hasSelection);
+    copyValueAction->setEnabled(hasSelection);
 
     // 连接动作（使用 exec 返回选择的动作）
     QAction *selectedAction = menu.exec(table->viewport()->mapToGlobal(pos));
@@ -779,6 +819,9 @@ void EnvViewer::onTableContextMenu(const QPoint &pos)
     } else if (selectedAction == copyAction) {
         table->selectRow(row);
         copyVariableName();
+    } else if (selectedAction == copyValueAction) {
+        table->selectRow(row);
+        copyVariableValue();
     }
 }
 void EnvViewer::copyVariableName()
@@ -797,4 +840,181 @@ void EnvViewer::copyVariableName()
 
     QApplication::clipboard()->setText(name);
     QMessageBox::information(this, "成功", "变量名已复制到剪贴板。");
+}
+
+void EnvViewer::copyVariableValue()
+{
+    int row = table->currentRow();
+    if (row < 0) {
+        QMessageBox::warning(this, "提示", "请先选中要复制的行。");
+        return;
+    }
+
+    QString value = table->item(row, 1)->text();
+    if (value.isEmpty()) {
+        QMessageBox::warning(this, "提示", "变量值为空，无法复制。");
+        return;
+    }
+
+    QApplication::clipboard()->setText(value);
+    QMessageBox::information(this, "成功", "变量值已复制到剪贴板。");
+}
+
+void EnvViewer::exportCustomVars()
+{
+    if (customVars.isEmpty()) {
+        QMessageBox::information(this, "提示", "没有自定义变量可导出。");
+        return;
+    }
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        "导出自定义变量",
+        QDir::homePath() + "/env_vars_export.sh",
+        "Shell 脚本 (*.sh);;所有文件 (*)"
+    );
+    if (filePath.isEmpty())
+        return;
+
+    QFile outFile(filePath);
+    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "错误", "无法写入文件：" + filePath);
+        return;
+    }
+
+    QTextStream out(&outFile);
+    out << "#!/bin/bash\n";
+    out << "# 环境变量导出文件 - 由 EnvViewer 生成\n";
+    out << "# 导出时间: " << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss") << "\n\n";
+
+    // 从 ~/.path 读取原始行导出，保留 $VAR 引用格式
+    QFile inFile(pathFilePath);
+    if (inFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&inFile);
+        while (!in.atEnd()) {
+            QString line = in.readLine();
+            QString trimmed = line.trimmed();
+            if (trimmed.startsWith("export "))
+                out << line << "\n";
+        }
+        inFile.close();
+    }
+
+    outFile.close();
+    QMessageBox::information(this, "成功", "自定义变量已导出到：\n" + filePath);
+}
+
+void EnvViewer::importCustomVars()
+{
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "导入自定义变量",
+        QDir::homePath(),
+        "Shell 脚本 (*.sh);;所有文件 (*)"
+    );
+    if (filePath.isEmpty())
+        return;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "错误", "无法读取文件：" + filePath);
+        return;
+    }
+
+    // 解析导入文件中的 export 行
+    struct ImportEntry {
+        QString key;
+        QString value;
+        QString rawLine;       // 原始行，用于追加写入
+        bool isAppend;         // 是否是追加模式（含 $VAR 自引用）
+    };
+    QList<ImportEntry> entries;
+
+    QTextStream in(&file);
+    while (!in.atEnd()) {
+        QString line = in.readLine();
+        QString trimmed = line.trimmed();
+        if (!trimmed.startsWith("export "))
+            continue;
+
+        QString rest = trimmed.mid(7).trimmed();
+        int eqIdx = rest.indexOf('=');
+        if (eqIdx == -1) continue;
+
+        QString key = rest.left(eqIdx).trimmed();
+        QString value = rest.mid(eqIdx + 1).trimmed();
+
+        // 去除外层引号
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith('\'') && value.endsWith('\'')))
+            value = value.mid(1, value.length() - 2);
+
+        // 判断是否为自引用追加模式（如 export PATH="$PATH:/new/path"）
+        QString dollarRef = "$" + key;
+        QString braceRef = "${" + key + "}";
+        bool isAppend = value.contains(dollarRef) || value.contains(braceRef);
+
+        entries.append({key, value, trimmed, isAppend});
+    }
+    file.close();
+
+    if (entries.isEmpty()) {
+        QMessageBox::information(this, "提示", "文件中未找到有效的变量定义。");
+        return;
+    }
+
+    // 统计导入结果
+    int added = 0, appended = 0, skipped = 0;
+    QStringList skippedVars, appendedVars;
+    QFile outFile(pathFilePath);
+    bool fileOpened = outFile.open(QIODevice::Append | QIODevice::Text);
+
+    for (const ImportEntry &entry : entries) {
+        const QString &key = entry.key;
+        const QString &value = entry.value;
+
+        if (entry.isAppend) {
+            // 追加模式：写入原始行到 ~/.path，再重新加载
+            if (fileOpened) {
+                QTextStream out(&outFile);
+                out << entry.rawLine << "\n";
+            }
+            appended++;
+            appendedVars.append(key);
+        } else {
+            // 普通变量：检查冲突
+            if (systemVars.contains(key) || customVars.contains(key)) {
+                skipped++;
+                skippedVars.append(key);
+                continue;
+            }
+
+            // 添加到内存
+            customVars.insert(key, value);
+
+            // 写入 ~/.path
+            if (fileOpened) {
+                QTextStream out(&outFile);
+                out << "export " << key << "=" << value << "\n";
+            }
+            added++;
+        }
+    }
+    if (fileOpened)
+        outFile.close();
+
+    // 重新加载自定义变量（展开 $VAR 引用）
+    loadCustomVarsFromFile();
+    updateTableDisplay();
+    sortPathFile();
+
+    // 结果提示
+    QString msg = QString("导入完成！\n成功导入：%1 个变量\n追加路径：%2 个变量").arg(added).arg(appended);
+    if (appended > 0) {
+        msg += "\n  - " + appendedVars.join("\n  - ");
+    }
+    if (skipped > 0) {
+        msg += QString("\n跳过（已存在）：%1 个变量\n  - %2").arg(skipped).arg(skippedVars.join("\n  - "));
+    }
+    QMessageBox::information(this, "导入结果", msg);
 }

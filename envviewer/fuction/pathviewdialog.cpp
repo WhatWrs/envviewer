@@ -1,5 +1,8 @@
 #include "pathviewdialog.h"
 #include <QMessageBox>
+#include <QMenu>
+#include <QApplication>
+#include <QClipboard>
 
 PathViewDialog::PathViewDialog(const QString &varName,
                                const QStringList &systemPaths,
@@ -25,6 +28,9 @@ PathViewDialog::PathViewDialog(const QString &varName,
     // 路径列表
     listWidget = new QListWidget(this);
     listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(listWidget, &QWidget::customContextMenuRequested,
+            this, &PathViewDialog::onContextMenu);
     listWidget->addItems(allPaths);
     // 区分系统路径和自定义路径
     QSet<QString> sysSet(systemPaths.begin(), systemPaths.end());
@@ -132,6 +138,21 @@ void PathViewDialog::onDeleteClicked()
     QList<QListWidgetItem*> selected = listWidget->selectedItems();
     if (selected.isEmpty()) return;
 
+    // 二次确认
+    QListWidgetItem *item = selected.first();
+    if (!(item->flags() & Qt::ItemIsSelectable))
+        return;
+
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "确认删除",
+        QString("确定要删除路径 \"%1\" 吗？").arg(item->text()),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No
+    );
+    if (reply != QMessageBox::Yes)
+        return;
+
     for (QListWidgetItem *item : selected) {
         if (!(item->flags() & Qt::ItemIsSelectable)) continue;
         delete listWidget->takeItem(listWidget->row(item));
@@ -148,5 +169,53 @@ void PathViewDialog::onDeleteClicked()
 
     emit customPathsChanged(m_varName, customPaths);
     QMessageBox::information(this, "成功", "选中路径已删除");   // 新增
+}
+
+void PathViewDialog::onContextMenu(const QPoint &pos)
+{
+    QListWidgetItem *item = listWidget->itemAt(pos);
+    bool hasSelection = (item != nullptr);
+
+    QMenu menu(this);
+    QAction *addAction = menu.addAction("添加路径");
+    QAction *editAction = menu.addAction("编辑路径");
+    QAction *deleteAction = menu.addAction("删除路径");
+    menu.addSeparator();
+    QAction *copyAction = menu.addAction("复制选中值");
+
+    // 没有选中项时禁用编辑、删除、复制
+    editAction->setEnabled(hasSelection);
+    deleteAction->setEnabled(hasSelection);
+    copyAction->setEnabled(hasSelection);
+
+    // 选中系统路径时禁用编辑、删除（灰色不可选）
+    if (hasSelection && !(item->flags() & Qt::ItemIsSelectable)) {
+        editAction->setEnabled(false);
+        deleteAction->setEnabled(false);
+    }
+
+    QAction *selectedAction = menu.exec(listWidget->viewport()->mapToGlobal(pos));
+    if (selectedAction == addAction) {
+        onAddClicked();
+    } else if (selectedAction == editAction) {
+        listWidget->setCurrentItem(item);
+        onEditClicked();
+    } else if (selectedAction == deleteAction) {
+        listWidget->setCurrentItem(item);
+        onDeleteClicked();
+    } else if (selectedAction == copyAction) {
+        listWidget->setCurrentItem(item);
+        copySelectedPath();
+    }
+}
+
+void PathViewDialog::copySelectedPath()
+{
+    QListWidgetItem *item = listWidget->currentItem();
+    if (!item) return;
+
+    QString text = item->text();
+    QApplication::clipboard()->setText(text);
+    QMessageBox::information(this, "成功", "路径已复制到剪贴板。");
 }
 
