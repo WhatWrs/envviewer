@@ -32,5 +32,5 @@ sha256sums_x86_64=("0890daaa7bbb112facec35364b7f8341890d22b25efb0982f58a02a12f98
 package() {
 
   install -dm755 ${pkgdir}/usr/bin
-  install -Dm755 ${srcdir}/envviewer/build/unknown-Release/envviewer ${pkgdir}/usr/bin/envviewer # srcdir 变量是软件来源解压后的目录
+  install -Dm755 ${srcdir}/src/build/unknown-Release/envviewer ${pkgdir}/usr/bin/envviewer # srcdir 变量是软件来源解压后的目录
 }

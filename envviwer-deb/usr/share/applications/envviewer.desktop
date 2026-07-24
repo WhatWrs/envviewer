@@ -3,7 +3,7 @@
 Categories=System;
 
 Comment=envviewer
-Exec=/opt/envviewer/envviewer
+Exec=env KDE_NO_GLOBAL_MENU=1 /opt/envviewer/envviewer
 
 GenericName=基于QT（6）编写的Linux下的环境变量编辑器
 Icon=envviewer

@@ -3,7 +3,7 @@
 
 cp -r  res/* envviewer-arch
 install -m644  envviewer.sh envviewer-arch/envviewer.sh
-install -m644  envviewer/build/unknown-Release/envviewer envviewer-arch
+install -m644  src/build/unknown-Release/envviewer envviewer-arch
 cd envviewer-arch
 
 tar -cvf envviewer.tar envviewer.sh envviewer envviewer.desktop hicolor

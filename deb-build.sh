@@ -1,11 +1,11 @@
 #!/bin/bash
 
-read -p"请输入版本号:（x.x.x）" VERSION
+read -p"请输入版本号:（x.x.x）:" VERSION
 
 
 
 #复制可执行文件
-cp envviewer/build/unknown-Release/envviewer  envviwer-deb/opt/envviewer/envviewer
+cp src/build/unknown-Release/envviewer  envviwer-deb/opt/envviewer/envviewer
 
 if [[ ! -d envviwer-deb/usr/share/icons/hicolor ]];then
     cp -r res/hicolor envviwer-deb/usr/share/icons
@@ -20,3 +20,6 @@ install -m644  res/envviewer.desktop envviwer-deb/usr/share/applications/envview
 
 #dpkg-deb --build   envviwer-deb envviwer_amd64_${VERSION}.deb
 dpkg-deb --build --root-owner-group  envviwer-deb envviwer_amd64_${VERSION}.deb
+
+
+sudo dpkg -i envviwer_amd64_${VERSION}.deb

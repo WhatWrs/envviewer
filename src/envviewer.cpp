@@ -57,7 +57,7 @@ EnvViewer::EnvViewer(QWidget *parent)
         aboutBox.setWindowTitle("关于");
         aboutBox.setIcon(QMessageBox::Information);
         aboutBox.setText("<h3>Linux 系统环境变量查看器</h3>"
-                         "<p>版本：1.0</p>"
+                         "<p>版本：1.1.0</p>"
                          "<p>一个基于 Qt 的 Linux 环境变量管理工具，"
                          "支持查看、添加、编辑和删除系统环境变量。</p>"
                          "<hr>"
