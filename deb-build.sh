@@ -21,5 +21,11 @@ install -m644  res/envviewer.desktop envviwer-deb/usr/share/applications/envview
 #dpkg-deb --build   envviwer-deb envviwer_amd64_${VERSION}.deb
 dpkg-deb --build --root-owner-group  envviwer-deb envviwer_amd64_${VERSION}.deb
 
+read -p "即将安装 envviwer_amd64_${VERSION}.deb，是否继续？(y/n) " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "安装已取消。"
+    exit 0   # 或 exit 1，取决于你想怎么退出
+fi
 
-sudo dpkg -i envviwer_amd64_${VERSION}.deb
+# 用户输入了 y 或 Y，执行安装
+sudo dpkg -i "envviwer_amd64_${VERSION}.deb"
